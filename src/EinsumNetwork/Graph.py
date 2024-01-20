@@ -596,7 +596,8 @@ if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
 
-    graph = random_binary_trees(7, 2, 3)
+        #num_var, depth, num_repetitions
+    graph = random_binary_trees(100, 2, 2)
     _, msg = check_graph(graph)
     print(msg)
 
@@ -604,6 +605,7 @@ if __name__ == '__main__':
     plt.clf()
     plt.title("Random binary tree (RAT-SPN)")
     plot_graph(graph)
+    plt.savefig("./g1.png")
     plt.show()
 
     print()
