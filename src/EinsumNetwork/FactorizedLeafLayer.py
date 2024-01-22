@@ -42,7 +42,7 @@ class FactorizedLeafLayer(Layer):
             raise AssertionError("All leaves must have the same number of distributions.")
         num_dist = num_dist[0]
         
-        self.num_dist = num_dist# oliver added this
+        self.num_dist = num_dist# oliver added this ... this is K in the paper
 
         replica_indices = set([n.einet_address.replica_idx for n in self.nodes])
         if sorted(list(replica_indices)) != list(range(len(replica_indices))):
@@ -50,20 +50,12 @@ class FactorizedLeafLayer(Layer):
         num_replica = len(replica_indices)
 
         if self.roth:
-            self.coefs = []
-            for c, node in enumerate(self.nodes):
-                # constant coefficient and coefficients for the variables in scope
-                tmp = torch.randn((1+len(node.scope)))
-                self.coefs.append(torch.nn.Parameter(tmp, requires_grad=True))
-            # self.coefs = torch.zeros((len(self.nodes), 1 + self.num_var))
+            self.coefs = torch.nn.Parameter(torch.randn((len(self.nodes), self.num_dist, 1+self.num_var)), requires_grad=True)
+            # self.coefs = []
             # for c, node in enumerate(self.nodes):
-            #     #print('node number', c)
-            #     # constant coefficient
-            #     self.coefs[c,0] = 0.01 + 0.98 * torch.rand(1)
-            #     # other coefficients
-            #     for scix in node.scope:
-            #         self.coefs[c,1+scix] = 0.01 + 0.98 * torch.rand(1)
-            # self.coefs = torch.nn.Parameter(self.coefs, requires_grad=True)
+            #     # constant coefficient and coefficients for the variables in scope
+            #     tmp = torch.randn((1+len(node.scope)))
+            #     self.coefs.append(torch.nn.Parameter(tmp, requires_grad=True
         else:
             # this computes an array of (batch, num_var, num_dist, num_repetition) exponential family densities
             # see ExponentialFamilyArray
@@ -115,13 +107,76 @@ class FactorizedLeafLayer(Layer):
         if self.roth:
             # compute log densities of shape (batch, K_num_dist, num_nodes)
             self.prob = torch.zeros((x.size(0), self.num_dist, len(self.nodes)))
-            cur_coefs = torch.sigmoid(self.coefs)
             for b in range(x.size(0)):
-                for k in range(self.num_dist):
-                    for c, node in enumerate(self.nodes):#self.nodes is specifically the leaves
-                        cur_x = torch.cat((torch.tensor([1.0]), torch.index_select(x[b], 0, torch.LongTensor(node.scope))))
-                        # compute roth polynomial (dot product of coefs with x) and normalize and then take log
-                        self.prob[b][k][c] = torch.log(torch.dot(cur_x, cur_coefs) / (2**(len(node.scope)) * cur_coefs[0] + 2**(len(node.scope)-1) * sum(cur_coefs[1:])))
+                for c, node in enumerate(self.nodes):#self.nodes is specifically the leaves
+                    # create a mask for the scope of this leaf
+                    scope_mask = torch.cat((torch.Tensor([1.0]),torch.zeros(self.num_var).scatter(0,torch.LongTensor(list(node.scope)), 1)))
+                    # obtain coefs (sigmoid self.coefs; zero out the out-of-scope coefs with scope_mask)
+                    # (this is 'broadcasting' to make the multiplication work across the k-dimension)
+                    cur_coefs = scope_mask * torch.sigmoid(self.coefs[c,:,:])
+                    # obtain cur_x (zero out the out-of-scope values with scope_mask)
+                    cur_x =  scope_mask * torch.cat((torch.tensor([1.0]), x[b]))
+                    # compute roth polynomial (dot product of coefs with x); normalize; take log
+                    # perform dot products manually torchishly
+                    res = torch.sum(cur_x * cur_coefs,1)
+                    #print('res',res.size())
+                    # compute normalizing constants torchishly
+                    Z = (2**(len(node.scope)) * cur_coefs[:,0] + 2**(len(node.scope)-1) * torch.sum(cur_coefs[:,1:],1))
+                    #print('Z', Z.size())
+                    self.prob[b,:,c] = res / Z
+                    #print(self.prob[b,:,c])
+                    #old: #torch.log(torch.dot(cur_x, cur_coefs, 1) / (2**(sc) * cur_coefs[:,0] + 2**(sc-1) * sum(cur_coefs[:,1:],1)))
+                    exit()
+            ##############################################################
+            # BEFORE I REMOVED B-LOOP
+            # # compute log densities of shape (batch, K_num_dist, num_nodes)
+            # self.prob = torch.zeros((x.size(0), self.num_dist, len(self.nodes)))
+            # for b in range(x.size(0)):
+            #     for c, node in enumerate(self.nodes):#self.nodes is specifically the leaves
+            #         # create a mask for the scope of this leaf
+            #         scope_mask = torch.cat((torch.Tensor([1.0]),torch.zeros(self.num_var).scatter(0,torch.LongTensor(list(node.scope)), 1)))
+            #         # obtain coefs (sigmoid self.coefs; zero out the out-of-scope coefs with scope_mask)
+            #         # (this is 'broadcasting' to make the multiplication work across the k-dimension)
+            #         cur_coefs = scope_mask * torch.sigmoid(self.coefs[c,:,:])
+            #         # obtain cur_x (zero out the out-of-scope values with scope_mask)
+            #         cur_x =  scope_mask * torch.cat((torch.tensor([1.0]), x[b]))
+            #         # compute roth polynomial (dot product of coefs with x); normalize; take log
+            #         # perform dot products manually torchishly
+            #         res = torch.sum(cur_x * cur_coefs,1)
+            #         #print('res',res.size())
+            #         # compute normalizing constants torchishly
+            #         Z = (2**(len(node.scope)) * cur_coefs[:,0] + 2**(len(node.scope)-1) * torch.sum(cur_coefs[:,1:],1))
+            #         #print('Z', Z.size())
+            #         self.prob[b,:,c] = res / Z
+            #         #print(self.prob[b,:,c])
+            #         #old: #torch.log(torch.dot(cur_x, cur_coefs, 1) / (2**(sc) * cur_coefs[:,0] + 2**(sc-1) * sum(cur_coefs[:,1:],1)))
+            #         exit()
+            ########################################################################
+            # BEFORE I REMOVED K-LOOP
+            # # compute log densities of shape (batch, K_num_dist, num_nodes)
+            # self.prob = torch.zeros((x.size(0), self.num_dist, len(self.nodes)))
+            # for b in range(x.size(0)):
+            #     for k in range(self.num_dist):
+            #         for c, node in enumerate(self.nodes):#self.nodes is specifically the leaves
+            #             # create a mask for the scope of this leaf
+            #             scope_mask = torch.cat((torch.Tensor([1.0]),torch.zeros(self.num_var).scatter(0,torch.LongTensor(list(node.scope)), 1)))
+            #             # obtain coefs (sigmoid self.coefs; zero out the out-of-scope coefs with scope_mask)
+            #             cur_coefs = scope_mask * torch.sigmoid(self.coefs[c,k,:])
+            #             # obtain cur_x (zero out the out-of-scope values with scope_mask)
+            #             cur_x =  scope_mask * torch.cat((torch.tensor([1.0]), x[b]))
+            #             # compute roth polynomial (dot product of coefs with x); normalize; take log
+            #             self.prob[b][k][c] = torch.log(torch.dot(cur_x, cur_coefs) / (2**(len(node.scope)) * cur_coefs[0] + 2**(len(node.scope)-1) * sum(cur_coefs[1:])))
+            ########################################################################
+            # VERSION WITH JAGGED (BUT MUCH SMALLER) COEFS MATRIX
+            # self.prob = torch.zeros((x.size(0), self.num_dist, len(self.nodes)))
+            # for b in range(x.size(0)):
+            #     for k in range(self.num_dist):
+            #         for c, node in enumerate(self.nodes):#self.nodes is specifically the leaves
+            #             cur_coefs = torch.sigmoid(self.coefs[c])
+            #             cur_x = torch.cat((torch.tensor([1.0]), torch.index_select(x[b], 0, torch.LongTensor(node.scope))))
+            #             # compute roth polynomial (dot product of coefs with x) and normalize and then take log
+            #             self.prob[b][k][c] = torch.log(torch.dot(cur_x, cur_coefs) / (2**(len(node.scope)) * cur_coefs[0] + 2**(len(node.scope)-1) * sum(cur_coefs[1:])))
+            ######################################################################
         else:
             # ef_array has shape (batch, num_var, num_dist, num_repetition) 
             self.prob = torch.einsum('bxir,xro->bio', self.ef_array(x), self.scope_tensor)

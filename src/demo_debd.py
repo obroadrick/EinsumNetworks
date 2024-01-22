@@ -1,11 +1,14 @@
 import torch
 from EinsumNetwork import Graph, EinsumNetwork
 import datasets
+import os
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print('device is', device)
+# choose a specific gpu
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 
-###
+### use cpu instead
 device = 'cpu'
 print('device is actually', device)
 ###
@@ -54,7 +57,8 @@ test_x = test_x_orig
 valid_x = valid_x_orig
 print('here2')
 # to torch
-train_x = torch.from_numpy(train_x).to(torch.device(device))
+train_x = torch.from_numpy(train_x).to(device)
+print('oh yeah')
 valid_x = torch.from_numpy(valid_x).to(torch.device(device))
 test_x = torch.from_numpy(test_x).to(torch.device(device))
 print('here3')
@@ -85,7 +89,7 @@ print(einet)
 
 
 # newthings:
-lr = 0.01
+lr = 0.05
 optimizer = torch.optim.Adam(einet.parameters(), lr=lr)
 
 
