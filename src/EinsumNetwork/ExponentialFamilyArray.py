@@ -513,8 +513,6 @@ class CategoricalArray(ExponentialFamilyArray):
     def __init__(self, num_var, num_dims, array_shape, K, use_em=True):
         super(CategoricalArray, self).__init__(num_var, num_dims, array_shape, num_dims * K, use_em=use_em)
         self.K = K
-        #temporary debugging code
-        print(num_var)
 
     def default_initializer(self):
         phi = (0.01 + 0.98 * torch.rand(self.num_var, *self.array_shape, self.num_dims * self.K))
@@ -570,9 +568,57 @@ class CategoricalArray(ExponentialFamilyArray):
 
 class RothLeafArray(ExponentialFamilyArray):
     """Implementation of Roth-polynomial distribution."""
+    """
+    ExponentialFamilyArray computes log-densities of exponential families in parallel. ExponentialFamilyArray is
+    abstract and needs to be derived, in order to implement a concrete exponential family.
+
+    The main use of ExponentialFamilyArray is to compute the densities for FactorizedLeafLayer, which computes products
+    of densities over single RVs. All densities over single RVs are computed in parallel via ExponentialFamilyArray.
+
+    Note that when we talk about single RVs, these can in fact be multi-dimensional. A natural use-case is RGB image
+    data: it is natural to consider pixels as single RVs, which are, however, 3-dimensional vectors each.
+
+    Although ExponentialFamilyArray is not derived from class Layer, it implements a similar interface. It is intended
+    that ExponentialFamilyArray is a helper class for FactorizedLeafLayer, which just forwards calls to the Layer
+    interface.
+
+    Best to think of ExponentialFamilyArray as an array of log-densities, of shape array_shape, parallel for each RV.
+    When evaluated, it returns a tensor of shape (batch_size, num_var, *array_shape) -- for each sample in the batch and
+    each RV, it evaluates an array of array_shape densities, each with their own parameters. Here, num_var is the number
+    of random variables, i.e. the size of the set (boldface) X in the paper.
+
+    The boolean use_em indicates if we want to use the on-board EM algorithm (alternatives would be SGD, Adam,...).
+
+    After the ExponentialFamilyArray has been generated, we need to initialize it. There are several options for
+    initialization (see also method initialize(...) below):
+        'default': use the default initializer (to be written in derived classes).
+        Tensor: provide a custom initialization.
+
+    In order to implement a concrete exponential family, we need to derive this class and implement
+
+        sufficient_statistics(self, x)
+        log_normalizer(self, theta)
+        log_h(self, x)
+
+        expectation_to_natural(self, phi)
+        default_initializer(self)
+        project_params(self, params)
+        reparam_function(self)
+        _sample(self, *args, **kwargs)
+
+    Please see docstrings of these functions below, for further details.
+    """
 
     def __init__(self, num_var, num_dims, array_shape, K, use_em=True):
-        super(CategoricalArray, self).__init__(num_var, num_dims, array_shape, num_dims * K, use_em=use_em)
+        """
+        :param num_var: number of random variables (int)
+        :param num_dims: dimensionality of random variables (int)
+        :param array_shape: shape of log-probability tensor, (tuple of ints)
+                            log-probability tensor will be of shape (batch_size, num_var,) + array_shape
+        :param num_stats: number of sufficient statistics of exponential family (int)
+        :param use_em: use internal EM algorithm? (bool)
+        """
+        super(RothLeafArray, self).__init__(num_var, num_dims, array_shape, num_dims * K, use_em=use_em)
         self.K = K
 
     def default_initializer(self):
@@ -590,6 +636,16 @@ class RothLeafArray(ExponentialFamilyArray):
         return torch.nn.functional.softmax(params, -1)
 
     def sufficient_statistics(self, x):
+        """
+        The sufficient statistics function for the implemented exponential family (called T(x) in the paper).
+
+        :param x: observed data (Tensor).
+                  If self.num_dims == 1, this can be either of shape (batch_size, self.num_var, 1) or
+                  (batch_size, self.num_var).
+                  If self.num_dims > 1, this must be of shape (batch_size, self.num_var, self.num_dims).
+        :return: sufficient statistics of the implemented exponential family (Tensor).
+                 Must be of shape (batch_size, self.num_var, self.num_stats)
+        """
         if len(x.shape) == 2:
             stats = one_hot(x.long(), self.K)
         elif len(x.shape) == 3:

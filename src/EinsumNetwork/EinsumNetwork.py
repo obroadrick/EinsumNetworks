@@ -27,7 +27,7 @@ class Args(object):
                  num_classes=1,
                  exponential_family=NormalArray,
                  exponential_family_args=None,
-                 use_em=True,
+                 use_em=False,
                  online_em_frequency=1,
                  online_em_stepsize=0.05):
         self.num_var = num_var
@@ -40,6 +40,8 @@ class Args(object):
             exponential_family_args = {}
         self.exponential_family_args = exponential_family_args
         self.use_em = use_em
+        print('here,,,',use_em)
+        print('here,,,',self.use_em)
         self.online_em_frequency = online_em_frequency
         self.online_em_stepsize = online_em_stepsize
 
@@ -62,7 +64,7 @@ class EinsumNetwork(torch.nn.Module):
         num_nodes is the number of nodes which are realized in parallel using this layer.
     Thus, in classical PCs, we would interpret the each layer as a collection of vector_length * num_nodes PC nodes.
 
-    The class EinsumNetork mainly governs the layer-wise layout, initialization, forward() calls, EM learning, etc.
+    The class EinsumNetwork mainly governs the layer-wise layout, initialization, forward() calls, EM learning, etc.
     """
 
     def __init__(self, graph, args=None):
@@ -74,7 +76,9 @@ class EinsumNetwork(torch.nn.Module):
             raise AssertionError(check_msg)
         self.graph = graph
 
+        print('here we are', args.use_em)
         self.args = args if args is not None else Args()
+        print('here we are2', self.args.use_em)
 
         if len(Graph.get_roots(self.graph)) != 1:
             raise AssertionError("Currently only EinNets with single root node supported.")
@@ -114,7 +118,9 @@ class EinsumNetwork(torch.nn.Module):
                     einet_layers.append(EinsumMixingLayer(graph, multi_sums, einet_layers[-1], use_em=self.args.use_em))
 
         self.einet_layers = torch.nn.ModuleList(einet_layers)
-        self.em_set_hyperparams(self.args.online_em_frequency, self.args.online_em_stepsize)
+        if self.args.use_em:
+            print('wtf')
+            self.em_set_hyperparams(self.args.online_em_frequency, self.args.online_em_stepsize)
 
     def initialize(self, init_dict=None):
         """
