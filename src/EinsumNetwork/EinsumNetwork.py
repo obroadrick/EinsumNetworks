@@ -119,7 +119,6 @@ class EinsumNetwork(torch.nn.Module):
 
         self.einet_layers = torch.nn.ModuleList(einet_layers)
         if self.args.use_em:
-            print('wtf')
             self.em_set_hyperparams(self.args.online_em_frequency, self.args.online_em_stepsize)
 
     def initialize(self, init_dict=None):

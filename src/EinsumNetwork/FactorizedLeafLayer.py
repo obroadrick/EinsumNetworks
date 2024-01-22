@@ -52,10 +52,18 @@ class FactorizedLeafLayer(Layer):
         if self.roth:
             self.coefs = []
             for c, node in enumerate(self.nodes):
-                self.coefs.append(0.01 + 0.98 * torch.rand(len(node.scope)+1))
-                # compute normalizing constant and normalize
-                Z = 2**(len(node.scope)) * self.coefs[-1][0] + 2**(len(node.scope)-1) * sum(self.coefs[-1])
-                self.coefs[-1] /= Z
+                # constant coefficient and coefficients for the variables in scope
+                tmp = torch.randn((1+len(node.scope)))
+                self.coefs.append(torch.nn.Parameter(tmp, requires_grad=True))
+            # self.coefs = torch.zeros((len(self.nodes), 1 + self.num_var))
+            # for c, node in enumerate(self.nodes):
+            #     #print('node number', c)
+            #     # constant coefficient
+            #     self.coefs[c,0] = 0.01 + 0.98 * torch.rand(1)
+            #     # other coefficients
+            #     for scix in node.scope:
+            #         self.coefs[c,1+scix] = 0.01 + 0.98 * torch.rand(1)
+            # self.coefs = torch.nn.Parameter(self.coefs, requires_grad=True)
         else:
             # this computes an array of (batch, num_var, num_dist, num_repetition) exponential family densities
             # see ExponentialFamilyArray
@@ -105,23 +113,15 @@ class FactorizedLeafLayer(Layer):
                  Note: num_dist is K in the paper, len(self.nodes) is the number of PC leaves
         """
         if self.roth:
-            # we want an output of shape (batch.....................
-            # (batch, var, K_num_dist, num_replica)   .... is what they make now from ef_array(x) and then sum over variables in the log domain (which corresponds to product of densities...
-            # ultimately we want log densities of size (batch, K_num_dist, num_nodes)
-            #self.prob = [][][]#whatever np.zeros(...adsfa)
+            # compute log densities of shape (batch, K_num_dist, num_nodes)
             self.prob = torch.zeros((x.size(0), self.num_dist, len(self.nodes)))
+            cur_coefs = torch.sigmoid(self.coefs)
             for b in range(x.size(0)):
                 for k in range(self.num_dist):
                     for c, node in enumerate(self.nodes):#self.nodes is specifically the leaves
-                        cur_coefs = self.coefs[c]
-                        # need cur_x to be those values of x referenced by this leaf
-                        #node.scope
-                        cur_x = []
-                        for idx in node.scope:
-                            cur_x.append(x[b,idx])
-                        cur_x = torch.cat((torch.tensor([1.0]), torch.FloatTensor(cur_x)))
-                        self.prob[b][k][c] = torch.log(torch.dot(cur_x, cur_coefs))
-                        #print(self.prob[b][k][c])
+                        cur_x = torch.cat((torch.tensor([1.0]), torch.index_select(x[b], 0, torch.LongTensor(node.scope))))
+                        # compute roth polynomial (dot product of coefs with x) and normalize and then take log
+                        self.prob[b][k][c] = torch.log(torch.dot(cur_x, cur_coefs) / (2**(len(node.scope)) * cur_coefs[0] + 2**(len(node.scope)-1) * sum(cur_coefs[1:])))
         else:
             # ef_array has shape (batch, num_var, num_dist, num_repetition) 
             self.prob = torch.einsum('bxir,xro->bio', self.ef_array(x), self.scope_tensor)

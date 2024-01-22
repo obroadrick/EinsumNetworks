@@ -74,7 +74,6 @@ args = EinsumNetwork.Args(
     exponential_family_args={'K': 2},
     num_sums=num_sums,
     num_var=train_x.shape[1],
-    use_em=False,
     online_em_frequency=1,
     online_em_stepsize=0.05)
 
@@ -82,12 +81,6 @@ einet = EinsumNetwork.EinsumNetwork(graph, args)
 einet.initialize()
 einet.to(device)
 print(einet)
-
-
-# newthings:
-lr = 0.01
-optimizer = torch.optim.Adam(einet.parameters(), lr=lr)
-
 
 for epoch_count in range(max_num_epochs):
 
@@ -103,25 +96,16 @@ for epoch_count in range(max_num_epochs):
 
     # train
     idx_batches = torch.randperm(train_N).split(batch_size)
-
     for batch_count, idx in enumerate(idx_batches):
         batch_x = train_x[idx, :]
-
-
-        # new
-        optimizer.zero_grad()
-
-        outputs = einet(batch_x)
+        outputs = einet.forward(batch_x)
 
         ll_sample = EinsumNetwork.log_likelihoods(outputs)
         log_likelihood = ll_sample.sum()
 
-        objective = -log_likelihood
+        objective = log_likelihood
         objective.backward()
 
-        # new
-        optimizer.step()
-
-        #einet.em_process_batch()
+        einet.em_process_batch()
 
     einet.em_update()
