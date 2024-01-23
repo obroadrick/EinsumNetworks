@@ -27,7 +27,7 @@ class Args(object):
                  num_classes=1,
                  exponential_family=NormalArray,
                  exponential_family_args=None,
-                 use_em=False,
+                 use_em=True,
                  online_em_frequency=1,
                  online_em_stepsize=0.05):
         self.num_var = num_var
@@ -40,8 +40,6 @@ class Args(object):
             exponential_family_args = {}
         self.exponential_family_args = exponential_family_args
         self.use_em = use_em
-        print('here,,,',use_em)
-        print('here,,,',self.use_em)
         self.online_em_frequency = online_em_frequency
         self.online_em_stepsize = online_em_stepsize
 
@@ -67,7 +65,7 @@ class EinsumNetwork(torch.nn.Module):
     The class EinsumNetwork mainly governs the layer-wise layout, initialization, forward() calls, EM learning, etc.
     """
 
-    def __init__(self, graph, args=None):
+    def __init__(self, graph, args=None, roth=False):
         """Make an EinsumNetwork."""
         super(EinsumNetwork, self).__init__()
 
@@ -76,9 +74,10 @@ class EinsumNetwork(torch.nn.Module):
             raise AssertionError(check_msg)
         self.graph = graph
 
-        print('here we are', args.use_em)
         self.args = args if args is not None else Args()
-        print('here we are2', self.args.use_em)
+            
+        if self.args.use_em and roth:
+            raise AssertionError('You cannot use EM with the Roth polynomial leaves')
 
         if len(Graph.get_roots(self.graph)) != 1:
             raise AssertionError("Currently only EinNets with single root node supported.")
@@ -105,7 +104,8 @@ class EinsumNetwork(torch.nn.Module):
                                             self.args.num_dims,
                                             self.args.exponential_family,
                                             self.args.exponential_family_args,
-                                            use_em=self.args.use_em)]
+                                            use_em=self.args.use_em,
+                                            roth=roth)]
 
         # internal layers
         for c, layer in enumerate(self.graph_layers[1:]):

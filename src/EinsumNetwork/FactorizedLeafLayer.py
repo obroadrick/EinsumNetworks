@@ -20,7 +20,7 @@ class FactorizedLeafLayer(Layer):
     computation) together in forward(...).
     """
 
-    def __init__(self, leaves, num_var, num_dims, exponential_family, ef_args, use_em=True, use_roth_polynomial=True):
+    def __init__(self, leaves, num_var, num_dims, exponential_family, ef_args, use_em=True, roth=False):
         """
         :param leaves: list of PC leaves (DistributionVector, see Graph.py)
         :param num_var: number of random variables (int)
@@ -35,7 +35,7 @@ class FactorizedLeafLayer(Layer):
         self.num_var = num_var
         self.num_dims = num_dims
 
-        self.roth = use_roth_polynomial
+        self.roth = roth
 
         num_dist = list(set([n.num_dist for n in self.nodes]))
         if len(num_dist) != 1:
@@ -51,6 +51,12 @@ class FactorizedLeafLayer(Layer):
 
         if self.roth:
             self.coefs = torch.nn.Parameter(torch.randn((len(self.nodes), 1+self.num_var, self.num_dist)), requires_grad=True)
+            # create mask for scopes (to be used in forward)
+            self.scopes_mask = []
+            for c, node in enumerate(self.nodes):
+                self.scopes_mask.append(torch.cat((torch.LongTensor([1.0]),torch.zeros(self.num_var,dtype=torch.long).scatter(0,torch.LongTensor(list(node.scope)), 1))))
+            self.scopes_mask = torch.stack(self.scopes_mask)
+            self.scope_sizes = torch.sum(self.scopes_mask,1)
         else:
             # this computes an array of (batch, num_var, num_dist, num_repetition) exponential family densities
             # see ExponentialFamilyArray
@@ -99,25 +105,15 @@ class FactorizedLeafLayer(Layer):
                  Will be of shape (batch_size, num_dist, len(self.nodes))   ...   (batch_size, K, num_leaves)
                  Note: num_dist is K in the paper, len(self.nodes) is the number of PC leaves
         """
-        # first let's create the scope matrix (to be moved to initialization time later)
-        self.scopes_mask = []
-        for c, node in enumerate(self.nodes):
-            self.scopes_mask.append(torch.cat((torch.LongTensor([1.0]),torch.zeros(self.num_var,dtype=torch.long).scatter(0,torch.LongTensor(list(node.scope)), 1))))
-        self.scopes_mask = torch.stack(self.scopes_mask)
         if self.roth:
-            # compute log densities of shape (batch, K_num_dist, num_nodes)
-            self.prob = torch.zeros((x.size(0), self.num_dist, len(self.nodes)))
-            # obtain coefs (sigmoid self.coefs; zero out the out-of-scope coefs with scope_mask)
-            # (this is 'broadcasting' to make the multiplication work across the k-dimension)
+            # obtain cur_coefs (sigmoid self.coefs; zero out the out-of-scope coefs with scope_mask)
             cur_coefs = self.scopes_mask[...,None] * torch.sigmoid(self.coefs)
-            #reshape attempt #cur_coefs = torch.reshape(self.scopes_mask,(self.scopes_mask.size(0),1,self.scopes_mask.size(1))) * torch.sigmoid(self.coefs)
             # obtain cur_x (zero out the out-of-scope values with scope_mask)
             cur_x = self.scopes_mask[:,None,:] * torch.cat((torch.ones((x.size(0),1)), x), 1)[None,...]
-            # compute roth polynomial (dot product of coefs with x); normalize; take log
-            # perform dot products manually torchishly
+            # compute roth polynomial (coefs dot x, normalize, log) torchishly
             res = torch.einsum("nbc,nck->bkn",cur_x,cur_coefs)
             # compute normalizing constants torchishly
-            Z = torch.transpose(2**(len(node.scope)) * cur_coefs[:,0] + 2**(len(node.scope)-1) * torch.sum(cur_coefs[:,1:],1), 0, 1)
+            Z = torch.transpose(2**(self.scope_sizes)[:,None] * cur_coefs[:,0,:] + 2**(self.scope_sizes)[:,None] * torch.sum(cur_coefs[:,1:,:],1), 0, 1)
             self.prob = torch.log(res / Z[None,:,:])
         else:
             # ef_array has shape (batch, num_var, num_dist, num_repetition) 
