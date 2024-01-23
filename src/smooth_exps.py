@@ -9,8 +9,8 @@ print('device is', device)
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 ### use cpu instead
-# device = 'cpu'
-# print('device is actually', device)
+device = 'cpu'
+print('device is actually', device)
 ###
 
 demo_text = """
@@ -68,7 +68,7 @@ test_N = test_x.shape[0]
 
 graph = Graph.random_binary_trees(num_var=train_x.shape[1], depth=depth, num_repetitions=num_repetitions)
 
-use_em = False
+use_em = False # if use_em is false, then SGD is used
 
 args = EinsumNetwork.Args(
     num_classes=1,
