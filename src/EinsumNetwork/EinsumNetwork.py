@@ -64,10 +64,20 @@ class EinsumNetwork(torch.nn.Module):
 
     The class EinsumNetwork mainly governs the layer-wise layout, initialization, forward() calls, EM learning, etc.
     """
+    # various methods of obtaining a distribution over the k>=1 variables in the scope of a leaf node
+    EINET = 0           # fully factorized
+    ROTH = 1            # c0+c1x1+c2x2+...+ckxk
+    ROTH_BAR = 2        # c0+c1x1+c2x2+...+ckxk + c0+c1(1-x1)+c2(1-x2)+...+ck(1-xk)
+    DETERMINANT = 3     # det[M]
+    METHODS = [EINET, ROTH, ROTH_BAR, DETERMINANT]
 
-    def __init__(self, graph, args=None, roth=False):
+    def __init__(self, graph, args=None, method=EINET):
         """Make an EinsumNetwork."""
         super(EinsumNetwork, self).__init__()
+
+        if method not in self.METHODS:
+            raise AssertionError("Invalid leaf method.")
+        self.method = method
 
         check_flag, check_msg = Graph.check_graph(graph)
         if not check_flag:
@@ -76,8 +86,8 @@ class EinsumNetwork(torch.nn.Module):
 
         self.args = args if args is not None else Args()
             
-        if self.args.use_em and roth:
-            raise AssertionError('You cannot use EM with the Roth polynomial leaves')
+        if self.args.use_em and not(method == self.EINET):
+            raise AssertionError('You cannot use EM with the non-EINET leaves')
 
         if len(Graph.get_roots(self.graph)) != 1:
             raise AssertionError("Currently only EinNets with single root node supported.")
@@ -105,7 +115,7 @@ class EinsumNetwork(torch.nn.Module):
                                             self.args.exponential_family,
                                             self.args.exponential_family_args,
                                             use_em=self.args.use_em,
-                                            roth=roth)]
+                                            method=self.method)]
 
         # internal layers
         for c, layer in enumerate(self.graph_layers[1:]):
