@@ -109,16 +109,16 @@ class FactorizedLeafLayer(Layer):
         if self.roth:
             # obtain cur_coefs (sigmoid self.coefs; zero out the out-of-scope coefs with scope_mask)
             cur_coefs = self.scopes_mask[...,None] * torch.sigmoid(self.coefs)
-            cur_coefs_bar = self.scopes_mask[...,None] * torch.sigmoid(self.coefs_bar)
+            #cur_coefs_bar = self.scopes_mask[...,None] * torch.sigmoid(self.coefs_bar)
             # obtain cur_x (zero out the out-of-scope values with scope_mask)
             cur_x = self.scopes_mask[:,None,:] * torch.cat((torch.ones((x.size(0),1)), x), 1)[None,...]
-            cur_x_bar = self.scopes_mask[:,None,:] * torch.cat((torch.ones((x.size(0),1)), 1-x), 1)[None,...]
+            #cur_x_bar = self.scopes_mask[:,None,:] * torch.cat((torch.ones((x.size(0),1)), 1-x), 1)[None,...]
             # compute roth polynomial (coefs dot x, normalize, log) torchishly
-            res = torch.einsum("nbc,nck->bkn",cur_x,cur_coefs) + torch.einsum("nbc,nck->bkn",cur_x_bar,cur_coefs_bar)
+            res = torch.einsum("nbc,nck->bkn",cur_x,cur_coefs) #+ torch.einsum("nbc,nck->bkn",cur_x_bar,cur_coefs_bar)
             # compute normalizing constants torchishly
             Z = torch.transpose(2**(self.scope_sizes)[:,None] * cur_coefs[:,0,:] + 2**(self.scope_sizes-1)[:,None] * torch.sum(cur_coefs[:,1:,:],1), 0, 1)
-            Z_bar = torch.transpose(2**(self.scope_sizes)[:,None] * cur_coefs_bar[:,0,:] + 2**(self.scope_sizes-1)[:,None] * torch.sum(cur_coefs_bar[:,1:,:],1), 0, 1)
-            Z_total = Z + Z_bar
+            #Z_bar = torch.transpose(2**(self.scope_sizes)[:,None] * cur_coefs_bar[:,0,:] + 2**(self.scope_sizes-1)[:,None] * torch.sum(cur_coefs_bar[:,1:,:],1), 0, 1)
+            Z_total = Z #+ Z_bar
             self.prob = torch.log(res / Z_total[None,:,:])
             ############################################################################
             # BEFORE ADDING THE MINUS VERSION
