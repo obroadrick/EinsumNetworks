@@ -24,26 +24,26 @@ print(demo_text)
 ##########################################################
 dataset = 'accidents'
 
-depth = 3
-num_repetitions = 3
-num_input_distributions = 3
-num_sums = 3
-
-max_num_epochs = 3
-batch_size = 32
-online_em_frequency = 1
-online_em_stepsize = 0.05
-
-# original settings:
 # depth = 3
-# num_repetitions = 10
-# num_input_distributions = 20
-# num_sums = 20
+# num_repetitions = 3
+# num_input_distributions = 3
+# num_sums = 3
 
-# max_num_epochs = 5
-# batch_size = 100
+# max_num_epochs = 3
+# batch_size = 32
 # online_em_frequency = 1
 # online_em_stepsize = 0.05
+
+# original settings:
+depth = 3
+num_repetitions = 10
+num_input_distributions = 20
+num_sums = 20
+
+max_num_epochs = 5
+batch_size = 100
+online_em_frequency = 1
+online_em_stepsize = 0.05
 
 ##########################################################
 
